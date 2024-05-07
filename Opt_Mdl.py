@@ -448,5 +448,5 @@ myModel.update()
 myModel.update   
 #    
 myModel.optimize()
-#name="NFL_HW1"
-##myModel.write(name+'.lp')
+name="NFL_HW1"
+myModel.write(name+'.lp')

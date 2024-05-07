@@ -78,7 +78,7 @@ CONFERENCE = {'NFC':['DAL', 'NYG', 'PHI','WAS','CHI', 'DET', 'GB','MIN','ATL','C
             
 myModel = Model()
 myModel.update()
-            
+
 ##OBJECTIVE FUNCTION##
 myGames = {}
 for h in T:
@@ -280,7 +280,26 @@ for w in range(1,8):
         constrName ='at_least_4away_every10weeks_w%s_h%s' %(w,a)
         myConstr[constrName]=myModel.addConstr(quicksum(myGames[a,h,s,w1] for h in A[a] for w1 in range(w, w+11) for s in S[w1]) +
                                                quicksum(myGames[a,'BYE',s,w1] for w1 in range(w, w+11) for s in S[w1] if (a,'BYE',s,w1) in myGames) >= 4, name = constrName)
-myModel.update()  
+myModel.update() 
+
+# constraint 16: All games in week 17 are within the same division
+for conference_teams in CONFERENCE.values():
+    for team1 in conference_teams:
+        for team2 in conference_teams:
+            if team1 != team2:
+                for division_teams in DIVISION.values():
+                    for division in division_teams.values():
+                        if team1 in division and team2 in division:
+                            constrName = 'same_division_week_17_%s_%s' % (team1, team2)
+                            myConstr[constrName] = myModel.addConstr(
+                                quicksum(myGames[team1, team2, s, 17] for s in S[17]) +
+                                quicksum(myGames[team2, team1, s, 17] for s in S[17]) == 0,
+                                name=constrName
+                            )
+                            break  # Exit the division loop once a matching division is found
+
+myModel.update()
 
 myModel.update()
 myModel.optimize()
+myModel.write('solution.json')

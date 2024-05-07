@@ -187,7 +187,7 @@ myModel.update()
 #constraint 10 Part 2: The late Monday Night Game must be hosted by a West Coast Team (SD, SF, SEA, OAK, LAR)
  #List of west coast teams
 
-for w in range(1,3):
+for w in range(1,2):
     if s in S[w]:
         constrName='%s_slot_w%s' %(s,w)
         myConstr[constrName]=myModel.addConstr(quicksum(myGames[a,h,'MON2_ESPN',w] for h in WC for a in H[h]) == 1, name=constrName)
@@ -289,12 +289,53 @@ for h in H:
                 if s[:4] == "THUN" and h!= 'DEN':
                         myModel.remove(myGames[a,h,s,1])
                         del myGames[a,h,s,1]
+                        
+
+myModel.update() 
+
+#constraint 17: All games in Week 17 must be between teams in the same division
+for w in range(17, 18):
+    for h in T:
+        for a in H[h]:
+            for s in S[17]:
+                if h != a:  # Ensure different teams
+                    h_division = None
+                    a_division = None
+                    # Find divisions of home and away teams
+                    for conference, divisions in DIVISION.items():
+                        for division, teams in divisions.items():
+                            if h in teams:
+                                h_division = division
+                            if a in teams:
+                                a_division = division
+                    # Add constraint if teams are not in the same division
+                    if h_division != a_division:
+                        constrName = 'same_division_week_17_%s_vs_%s' % (h, a)
+                        myConstr[constrName] = myModel.addConstr(myGames[a, h, s, w] == 0, name=constrName)
+myModel.update()
+
+
+# Constraint: No team plays each other in back-to-back games
+for t1 in T:
+    for t2 in T:
+        if t1 != t2:  # Ensure different teams
+            for w in range(1, 17):  # Iterate over weeks
+                for s1 in S[w]:  # Iterate over slots in week w
+                    for s2 in S[w+1]:  # Iterate over slots in week w+1
+                        if (t1, t2, s1, w) in myGames and (t2, t1, s2, w+1) in myGames:
+                            constrName = 'no_back_to_back_games_%s_%s_before_w%s_%s_%s' % (t1, t2, w, s1, s2)
+                            myConstr[constrName] = myModel.addConstr(
+                                myGames[t1, t2, s1, w] + myGames[t2, t1, s2, w+1] <= 1,
+                                name=constrName
+                            )
+myModel.update()            
 
 #Objective 2: Minimize the number of division series that end in the first half of the season.  
 #OBJECTIVE FUNCTION##
 
 myModel.update()
 myModel.optimize()
+myModel.write('solution.json')
 #    
 #dirtyHarris= {'Good':['DAL', 'GB', 'PHI','NE','DEN','PIT','SEA','CHI','NYG','SF','NO'],
 #              'Bad':['ARZ', 'ATL', 'WAS','MIN', 'PHI','OAK','CAR','MIA','IND','BUF','DET'],
