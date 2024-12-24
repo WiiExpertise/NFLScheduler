@@ -11,11 +11,24 @@ Created on Wed Mar 30 08:34:54 2016
 
 @author: John
 """
-import csv 
-from gurobipy import * 
+import csv
+import json 
+from gurobipy import *
+
+import sys
+import os
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
+# Read the JSON file
+with open(resource_path('auxiliaryLookup.json'), 'r') as json_file:
+    data = json.load(json_file)
 
 H = {}
-myFile = open('Opponents 17G Season 2016.csv','rt')
+myFile = open(resource_path('Opponents 17G Season 2016.csv'),'rt')
 myReader = csv.reader(myFile)    
 for row in myReader:
     if row[0] != 'Away Team':
@@ -29,7 +42,7 @@ myFile.close()
 
 
 A = {}
-myFile = open('Opponents 17G Season 2016.csv','rt')
+myFile = open(resource_path('Opponents 17G Season 2016.csv'),'rt')
 myReader = csv.reader(myFile) 
 for row in myReader:
     if row[0] != 'Away Team':
@@ -43,7 +56,7 @@ for row in myReader:
 myFile.close()
 
 S = {}
-myFile= open('Slots17.csv')
+myFile= open(resource_path('Slots17.csv'))
 myReader = csv.reader(myFile)
 for row in myReader:
     for cell in row:
@@ -61,15 +74,15 @@ T = ['DAL', 'NYG', 'PHI','WAS','CHI', 'DET', 'GB','MIN','ATL','CAR','NO','TB',
      'HOU','IND','JAC','TEN','DEN','KC','OAK','SD']
 
      
-DIVISION = {'NFC':{'EAST':['DAL', 'NYG', 'PHI','WAS'],
-                   'NORTH':['CHI', 'DET', 'GB','MIN'],
-                   'SOUTH':['ATL', 'CAR','NO','TB'],
-                   'WEST':['ARZ','LAR','SF','SEA']
+DIVISION = {'NFC':{'NEAST':['DAL', 'NYG', 'PHI','WAS'],
+                   'NNORTH':['CHI', 'DET', 'GB','MIN'],
+                   'NSOUTH':['ATL', 'CAR','NO','TB'],
+                   'NWEST':['ARZ','LAR','SF','SEA']
                    },
-            'AFC':{'EAST': ['BUF','MIA','NE','NYJ'],
-                   'NORTH': ['BAL','CIN','CLE','PIT'],
-                   'SOUTH': ['HOU','IND','JAC','TEN'],
-                   'WEST': ['DEN','KC','OAK','SD']            
+            'AFC':{'AEAST': ['BUF','MIA','NE','NYJ'],
+                   'ANORTH': ['BAL','CIN','CLE','PIT'],
+                   'ASOUTH': ['HOU','IND','JAC','TEN'],
+                   'AWEST': ['DEN','KC','OAK','SD']            
                    }
             }
 CONFERENCE = {'NFC':['DAL', 'NYG', 'PHI','WAS','CHI', 'DET', 'GB','MIN','ATL','CAR','NO','TB','ARZ','LAR','SF','SEA'],
@@ -144,11 +157,26 @@ myModel.update()
 
 #constraint 6: Exactly 1 Thursday game every week upto week 16, week 17 has no thursday games
 Thursday = ['THUN_NBC' , 'THUN_NFL' , 'THUN_NFL' , 'THUE_FOX' ,'THUL_CBS', 'THUN_NBC' , 'THUN_CBS'  ]
-for w in range(1,18):
+for w in range(1, 18):
     for s in S[w]:
         if s in Thursday:
-            constrName='6_one_Thursady_in_w%s' %(w)
-            myConstr[constrName]=myModel.addConstr(quicksum(myGames[a,h,s,w] for h in T for a in H[h] ) ==1 ,name=constrName)
+            constrName = '6_one_Thursday_in_w%s' % (w)
+            if w == 12:
+                constrName2 = '6_one_DALDET_in_w%s' % (w)
+                # Adding specific conditions for Week 12
+                if s == 'THUE_FOX':
+                    myConstr[constrName2] = myModel.addConstr(
+                        quicksum(myGames[a, h, s, w] for h in ['DET'] for a in H[h]) == 1, name=constrName)
+                elif s == 'THUL_CBS':
+                    myConstr[constrName2] = myModel.addConstr(
+                        quicksum(myGames[a, h, s, w] for h in ['DAL'] for a in H[h]) == 1, name=constrName)
+                    
+                myConstr[constrName] = myModel.addConstr(
+                    quicksum(myGames[a, h, s, w] for h in T for a in H[h]) == 1, name=constrName)
+            else:
+                # For other weeks, the constraint remains the same
+                myConstr[constrName] = myModel.addConstr(
+                    quicksum(myGames[a, h, s, w] for h in T for a in H[h]) == 1, name=constrName)
 myModel.update()
 
 #constraint 7:There are two Saturday Night Games in Week 15 (one SatE and one SatL)
@@ -286,34 +314,39 @@ myModel.update()
 for h in H:
     for a in H[h]:
         for s in S[1]:
-                if s[:4] == "THUN" and h!= 'KC':
+                if s[:4] == "THUN" and h!= data['superBowlChampion']:
                         myModel.remove(myGames[a,h,s,1])
                         del myGames[a,h,s,1]
                         
 
 myModel.update() 
 
-#constraint 17: All games in Week 17 must be between teams in the same division
-for w in range(18, 19):
-    for h in T:
-        for a in H[h]:
-            for s in S[18]:
-                if h != a:  # Ensure different teams
-                    h_division = None
-                    a_division = None
-                    # Find divisions of home and away teams
-                    for conference, divisions in DIVISION.items():
-                        for division, teams in divisions.items():
-                            if h in teams:
-                                h_division = division
-                            if a in teams:
-                                a_division = division
-                    # Add constraint if teams are not in the same division
-                    if h_division != a_division:
-                        constrName = 'same_division_week_17_%s_vs_%s' % (h, a)
-                        myConstr[constrName] = myModel.addConstr(myGames[a, h, s, w] == 0, name=constrName)
+# Corrected Constraint 17: Ensure all Week 18 games are divisional
+for h in T:
+    for a in T:
+        if h != a:
+            # Identify the divisions for home and away teams
+            h_division = next((division for conference, divisions in DIVISION.items()
+                               for division, teams in divisions.items() if h in teams), None)
+            a_division = next((division for conference, divisions in DIVISION.items()
+                               for division, teams in divisions.items() if a in teams), None)
+            
+            # If home and away teams are not in the same division, prohibit the game in Week 18
+            if h_division != a_division:
+                for s in S[18]:  # All slots for Week 18 (outside of the `if` condition)
+                    # Check if myGames[h, a, s, 18] exists before creating a constraint
+                    if (a, h, s, 18) in myGames:
+                        constrName = f'same_division_week_18_{a}_vs_{h}_slot_{s}'
+                        myConstr[constrName] = myModel.addConstr(myGames[a, h, s, 18] == 0, name=constrName)
+                    #else:
+                        # Optional debug output to track missing entries
+                        #print(f"Skipping constraint for non-existent game entry: ({a}, {h}, {s}, 18)")
+            #else:
+                # Debug output to track same division games
+                #print(f"Same division game: {h} vs {a}")
+                #print(f"Divisions: {h_division} vs {a_division}")
+            
 myModel.update()
-
 
 # Constraint: No team plays each other in back-to-back games
 for t1 in T:
@@ -328,7 +361,23 @@ for t1 in T:
                                 myGames[t1, t2, s1, w] + myGames[t2, t1, s2, w+1] <= 1,
                                 name=constrName
                             )
-myModel.update()            
+myModel.update()
+
+# Constraint: No team plays in specific slots in back-to-back weeks
+PrimetimeSlots = ['THUN_NFL', 'THUN_NBC', 'THUN_CBS', 'SUNN_NBC', 'MON0_ESPN', 'MON1_ESPN', 'MON2_ESPN'] 
+for t in T:  # Iterate over teams
+    for w in range(1, 18):  # Iterate over weeks (up to week 16 to avoid out of range error)
+        for s in S[w]:  # Iterate over slots in week w
+            if s in PrimetimeSlots:  # Check if the slot is in the list of restricted slots
+                # Check if there's a next week and if the team plays in the same slot next week
+                if w + 1 <= 18 and s in S[w + 1]:
+                    constrName = 'no_back_to_back_slots_%s_in_%s_w%s_w%s' % (t, s, w, w + 1)
+                    myConstr[constrName] = myModel.addConstr(
+                        quicksum(myGames.get((t, a, s, w), 0) + myGames.get((a, t, s, w), 0) for a in T) + 
+                        quicksum(myGames.get((t, a, s, w + 1), 0) + myGames.get((a, t, s, w + 1), 0) for a in T) <= 1,
+                        name=constrName
+                    )
+myModel.update()
 
 #Objective 2: Minimize the number of division series that end in the first half of the season.  
 #OBJECTIVE FUNCTION##
