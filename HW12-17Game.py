@@ -208,8 +208,12 @@ myModel.update()
 #constraint 10 Part 1: There are two Monday night games in week 1
 WC=['SD', 'SF', 'SEA', 'OAK', 'LAR']
 
-constrName='2_Mondays_in_w1'
-myConstr[constrName]=myModel.addConstr(quicksum(myGames[a,h,s,1]for h in T for a in H[h] for s in ['MON0_ESPN','MON2_ESPN']) == 2,name=constrName)
+constrName='1_MON0_ESPN_in_w1'
+myConstr[constrName]=myModel.addConstr(quicksum(myGames[a,h,'MON0_ESPN',1] for h in T for a in H[h]) == 1,name=constrName)
+myModel.update()
+
+constrName='1_MON2_ESPN_in_w1'
+myConstr[constrName]=myModel.addConstr(quicksum(myGames[a,h,'MON2_ESPN',1] for h in T for a in H[h]) == 1,name=constrName)
 myModel.update()
 
 #constraint 10 Part 2: The late Monday Night Game must be hosted by a West Coast Team (SD, SF, SEA, OAK, LAR)
@@ -235,6 +239,21 @@ WCMT=WC+MT
 for w in range(1,19):
     constrName='WstCst_MtTm_cannot_SUNE_w%s' %(w)
     myConstr[constrName]=myModel.addConstr(quicksum(myGames[a,h,s,w] for h in WCMT for a in H[h] for s in ['SUNE_CBS','SUNE_FOX'])==0,name=constrName)
+myModel.update()
+
+#constraint 11a: Only 1 game in SUNI_NFL slot per week containing the SUNI_NFL slot
+for w in range(1,19):
+    if 'SUNI_NFL' in S[w]:
+        constrName='1_SUNI_NFL_w%s' %(w)
+        myConstr[constrName]=myModel.addConstr(quicksum(myGames[a,h,'SUNI_NFL',w] for h in T for a in H[h] if (a,h,'SUNI_NFL',w) in myGames)==1,name=constrName)
+myModel.update()
+
+#constraint 11b: All games in SUNL_CBS or SUNL_FOX slots must be hosted by west coast or mountain teams
+for w in range(1,19):
+    for s in ['SUNL_CBS','SUNL_FOX']:
+        if s in S[w]:
+            constrName='WstCst_MtTm_must_host_SUNL_%s_w%s' %(s,w)
+            myConstr[constrName]=myModel.addConstr(quicksum(myGames[a,h,s,w] for h in WCMT for a in H[h])==quicksum(myGames[a,h,s,w] for h in T for a in H[h]),name=constrName)
 myModel.update()
     
 #constraint 12_Home_Games: No team plays 4 consecutive home/away games in a season (treat a BYE game as an away game)
